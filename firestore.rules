@@ -1,0 +1,167 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: /users/{uid}
+    // Document ID: Firebase Auth UID
+    // Fields:
+    //   - uid: string (required, immutable) - Firebase Auth UID
+    //   - email: string (required, immutable) - User's email address
+    //   - displayName: string (optional) - User's display name
+    //   - role: string (required, enum: ['admin', 'user']) - User's role
+    //
+    // Collection: /deliveries/{deliveryId}
+    // Document ID: Unique ID
+    // Fields:
+    //   - id: string (required, immutable) - Unique ID of the delivery
+    //   - customer: string (required) - Name of the customer
+    //   - ownerUid: string (required, immutable) - UID of the owner
+    //   - status: string (required) - Delivery status
+    //   - value: string (required) - Formatted value
+    //   - quantity: number (required) - Number of packages
+    //   - paymentStatus: string (required) - Payment status
+    //   - paymentDate: string (optional) - Date of payment (YYYY-MM-DD)
+    //   [Other fields: sugarCane, unitPrice, deliveryDateTime, paymentMethod, observations]
+    //
+    // Collection: /customers/{customerId}
+    // Document ID: Unique ID
+    // Fields:
+    //   - id: string (required, immutable) - Unique ID of the customer
+    //   - name: string (required) - Full name of the customer
+    //   - ownerUid: string (required, immutable) - UID of the owner
+    //   - phone: string (required) - Phone number
+    //   - address: string (required) - Main address
+    //   - joinDate: string (required) - Date when the customer joined
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.ownerUid;
+    }
+
+    function isAdmin() {
+      let adminEmails = ["ramosryan020@gmail.com", "wrizckryan123@gmail.com", "kicanarenato@gmail.com"];
+      return isAuthenticated() &&
+        ((request.auth.token.email in adminEmails && request.auth.token.email_verified == true) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function uidUnchanged() {
+      return !('ownerUid' in request.resource.data) ||
+        request.resource.data.ownerUid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('ownerUid' in request.resource.data) ||
+        request.resource.data.ownerUid == resource.data.ownerUid;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasOnly(['uid', 'email', 'displayName', 'role']) &&
+             data.uid is string && data.uid == request.auth.uid &&
+             data.email is string && isValidEmail(data.email) &&
+             (data.displayName == null || data.displayName is string) &&
+             data.role in ['admin', 'user'];
+    }
+
+    function isValidDelivery(data) {
+      let requiredFields = ['id', 'customer', 'ownerUid', 'status', 'value', 'quantity', 'paymentStatus'];
+      let allowedFields = ['id', 'customer', 'address', 'type', 'value', 'status', 'eta', 'quantity', 'sugarCane', 'unitPrice', 'deliveryDateTime', 'paymentStatus', 'paymentMethod', 'observations', 'paymentDate', 'ownerUid'];
+      
+      return data.keys().hasAll(requiredFields) &&
+             data.keys().hasOnly(allowedFields) &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
+             data.customer is string && data.customer.size() > 0 && data.customer.size() < 100 &&
+             data.ownerUid is string && data.ownerUid == request.auth.uid &&
+             data.status in ['Pendente', 'Em Rota', 'Entregue'] &&
+             data.value is string && data.value.size() > 0 && data.value.size() < 50 &&
+             data.quantity is number && data.quantity >= 0 &&
+             data.paymentStatus in ['Pendente', 'Pago', 'Parcial'] &&
+             (!('address' in data) || (data.address is string && data.address.size() < 200)) &&
+             (!('type' in data) || (data.type is string && data.type.size() < 50)) &&
+             (!('eta' in data) || (data.eta is string && data.eta.size() < 50)) &&
+             (!('sugarCane' in data) || data.sugarCane is number) &&
+             (!('unitPrice' in data) || data.unitPrice is number) &&
+             (!('deliveryDateTime' in data) || (data.deliveryDateTime is string && data.deliveryDateTime.size() < 50)) &&
+             (!('paymentMethod' in data) || (data.paymentMethod is string && data.paymentMethod.size() < 50)) &&
+             (!('observations' in data) || (data.observations is string && data.observations.size() < 1000)) &&
+             (!('paymentDate' in data) || (data.paymentDate is string && data.paymentDate.matches("^\\d{4}-\\d{2}-\\d{2}$")));
+    }
+
+    function isValidCustomer(data) {
+      let requiredFields = ['id', 'name', 'ownerUid', 'phone', 'address', 'joinDate'];
+      return data.keys().hasAll(requiredFields) &&
+             data.keys().hasOnly(requiredFields) &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.ownerUid is string && data.ownerUid == request.auth.uid &&
+             data.phone is string && data.phone.size() > 0 && data.phone.size() < 30 &&
+             data.address is string && data.address.size() > 0 && data.address.size() < 200 &&
+             data.joinDate is string && data.joinDate.size() > 0 && data.joinDate.size() < 50;
+    }
+
+    // ===============================================================
+    // Match Rules
+    // ===============================================================
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (request.resource.data.role == 'user' || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
+    }
+
+    match /deliveries/{deliveryId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidDelivery(request.resource.data) && uidUnchanged();
+      allow update: if isAuthenticated() && isValidDelivery(request.resource.data) && isDocOwner() && uidNotModified();
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /customers/{customerId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidCustomer(request.resource.data) && uidUnchanged();
+      allow update: if isAuthenticated() && isValidCustomer(request.resource.data) && isDocOwner() && uidNotModified();
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

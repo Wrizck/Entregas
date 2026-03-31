@@ -1,0 +1,68 @@
+{
+  "entities": {
+    "Delivery": {
+      "title": "Delivery",
+      "description": "A delivery of sugar cane to a customer.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID of the delivery." },
+        "customer": { "type": "string", "description": "Name of the customer." },
+        "address": { "type": "string", "description": "Delivery address." },
+        "type": { "type": "string", "description": "Type of delivery (e.g., Express, Padrão)." },
+        "value": { "type": "string", "description": "Total value of the delivery as a formatted string." },
+        "status": { "type": "string", "description": "Current status of the delivery (e.g., Pendente, Em Rota, Entregue)." },
+        "eta": { "type": "string", "description": "Estimated time of arrival." },
+        "quantity": { "type": "number", "description": "Number of packages." },
+        "sugarCane": { "type": "number", "description": "Sugar cane weight in kg." },
+        "unitPrice": { "type": "number", "description": "Price per unit." },
+        "deliveryDateTime": { "type": "string", "format": "date-time", "description": "ISO date-time of the delivery." },
+        "paymentStatus": { "type": "string", "description": "Payment status (e.g., Pendente, Pago, Parcial)." },
+        "paymentMethod": { "type": "string", "description": "Payment method (e.g., Dinheiro, Pix, Cartão)." },
+        "observations": { "type": "string", "description": "Any additional notes." },
+        "paymentDate": { "type": "string", "format": "date", "description": "Date when payment was received (YYYY-MM-DD)." },
+        "ownerUid": { "type": "string", "description": "UID of the user who owns this delivery record." }
+      },
+      "required": ["id", "customer", "ownerUid"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "A registered customer.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID of the customer." },
+        "name": { "type": "string", "description": "Full name of the customer." },
+        "phone": { "type": "string", "description": "Phone number." },
+        "address": { "type": "string", "description": "Main address." },
+        "joinDate": { "type": "string", "description": "Date when the customer joined." },
+        "ownerUid": { "type": "string", "description": "UID of the user who owns this customer record." }
+      },
+      "required": ["id", "name", "ownerUid"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Application user profile.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID." },
+        "email": { "type": "string", "format": "email", "description": "User's email address." },
+        "displayName": { "type": "string", "description": "User's display name." },
+        "role": { "type": "string", "enum": ["admin", "user"], "description": "User's role." }
+      },
+      "required": ["uid", "email"]
+    }
+  },
+  "firestore": {
+    "/deliveries/{deliveryId}": {
+      "schema": "Delivery",
+      "description": "Collection of all deliveries."
+    },
+    "/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Collection of all registered customers."
+    },
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "Collection of user profiles."
+    }
+  }
+}
